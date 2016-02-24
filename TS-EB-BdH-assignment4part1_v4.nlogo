@@ -120,11 +120,16 @@ end
 ; --- Update desires ---
 to update-desires
   ; You should update your agent's desires here.
-  ; Keep in mind that now you have more than one agent.
-
-  ; desires
-  ; - clean
-  ; - stop and turn off
+  ; At the beginning your agent should have the desire to 'clean all the dirt'.
+  ; If it realises that there is no more dirt, its desire should change to something like 'stop and turn off'.
+  ask vacuums[
+    ifelse ticks > 0 and (count patches with [pcolor != white] = 0) ; if simulation is running and no more dirt present
+      [
+      set desire "stop and turn off" ; agent's desire becomes 'stop and turn off'
+      set color black ; and he turns black
+      ]
+      [set desire "clean all the dirt"] ; if not, agent's desire becomes 'clean all the dirt'
+  ]; update
 end
 
 ; --- Update beliefs ---
@@ -142,21 +147,17 @@ to update-beliefs
 end
 
 
-; --- Update intentions ---
 to update-intentions
   ; You should update your agent's intentions here.
-
-  ; intentions:
-  ; - walk around
-  ; - observe local env
-  ; - clean dirt at current location (if colour is corresponding agent colour)
-
-  ; if statements
-  ; - if no dirt of own colour in belief base, move randomly
-  ; - if dirt of own colour in belief base, move to closest and clean
-  ; - if at location, look around
-  ; - if piece of dirt with own colour, add to belief base
-
+  ; The agent's intentions should be dependent on its beliefs and desires.
+  ask vacuums [
+    if desire = "clean all the dirt" and not empty? beliefs[ ; if agent desires to 'clean all the dirt' and has beliefs
+       set intention first beliefs ; set intention to the first item in its beliefbase ****************SET INTENTION TO "GO TO LOCATION FIRST BELIEFS"
+    ]
+    if desire = "stop and turn off"[ ; if agent desires to 'stop and turn off'
+     set intention "none" ; set intention to none
+    ]
+  ]
 end
 
 
@@ -180,12 +181,21 @@ end
 
 ; method for moving
 to move
-  ; choose arbitrary angle for movement
-  ; if next cell is unreachable, turn randomly
-  ifelse can-move? 1
-  [forward 1]
-  [set heading random 360]
+  ask vacuums
+  [
+    ifelse (intention != patch-here and not empty? beliefs and desire = "clean all the dirt") ; if agent has an intention and has the desire to clean
+      [
+        face intention
+        forward 1
+      ]
+      [
+        ifelse can-move? 1
+        [forward 1]
+        [set heading random 360]
+      ]
+  ]
 end
+
 
 ; method for cleaning
 to clean
@@ -263,7 +273,7 @@ dirt_pct
 dirt_pct
 0
 100
-28
+1
 1
 1
 NIL
@@ -329,7 +339,7 @@ num_agents
 num_agents
 2
 7
-4
+3
 1
 1
 NIL
