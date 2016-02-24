@@ -169,7 +169,10 @@ to execute-actions
 
   ask vacuums [move]
   ask vacuums [observe]
-  ask vacuums [clean]
+  ask vacuums [
+    if intention = patch-here and not empty? beliefs
+    [clean]
+    ]
 end
 
 ; TO DO:
@@ -189,7 +192,7 @@ to move
         forward 1
       ]
       [
-        ifelse can-move? 1
+        ifelse can-move? 1 and pcolor = white
         [forward 1]
         [set heading random 360]
       ]
@@ -200,6 +203,10 @@ end
 ; method for cleaning
 to clean
   ; clean cell
+  if pcolor = color [
+    set pcolor white
+    set beliefs remove-item 0 beliefs
+  ]
 end
 
 ;method for rondkijken
@@ -273,7 +280,7 @@ dirt_pct
 dirt_pct
 0
 100
-1
+28
 1
 1
 NIL
