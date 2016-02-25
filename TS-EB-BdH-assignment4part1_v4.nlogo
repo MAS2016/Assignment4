@@ -24,7 +24,7 @@
 ;
 ; 1) total_dirty: this variable represents the amount of dirty cells in the environment.
 ; 2) time: the total simulation time.
-globals [total_dirty time colors]
+globals [total_dirty time colors color_others]
 
 
 ; --- Agents ---
@@ -43,7 +43,7 @@ breed [sensors sensor]
 ; 2) desire: the agent's current desire
 ; 3) intention: the agent's current intention
 ; 4) own_color: the agent's belief about its own target color
-vacuums-own [beliefs desire intention own_color]
+vacuums-own [beliefs desire intention own_color dirt_count]
 
 
 ; --- Setup ---
@@ -65,25 +65,27 @@ to go
   update-intentions
   execute-actions
   tick
+  if count patches with [pcolor != white] > 0 ; report time to complete the task
+    [set time ticks]
 end
 
 
 ; --- Setup patches ---
 to setup-patches
   ; In this method you may create the environment (patches), using colors to define cells with various types of dirt.
-  set colors []
-  ; select a number of colors equal to a number of agents
-  let i 0
-  print "does this work?"
-  loop [
-    let col (random 14) * 10 + 5
-    set colors lput col colors
+  set colors []                          ; select a number of colors equal to a number of agents
+
+  loop
+  [
+    let col (random 14) * 10 + 5         ; choose between a random color
+    set colors lput col colors           ; put color as first item in list
     set colors remove-duplicates colors
-    if length colors = num_agents
+    if length colors = num_agents        ; if number of colors in list equals number of agents
     [
-      ask patches [
-        ifelse random 100 < dirt_pct [
-          ; choose randomly between colours if the patch is dirty
+      ask patches
+      [
+        ifelse random 100 < dirt_pct     ; then, choose randomly between colours if the patch is dirty
+        [
           let patchCol random num_agents
           set pcolor item patchCol colors
         ]
@@ -99,11 +101,12 @@ end
 ; --- Setup vacuums ---
 to setup-vacuums
   ; In this method you may create the vacuum cleaner agents.
-  create-vacuums num_agents [
-    setxy (random max-pxcor) (random max-pycor)
-    let col random length colors
+  create-vacuums num_agents [                                    ; create vacuums
+    setxy (random-xcor) (random-ycor)                            ; with random starting positions
+    let col random length colors                                 ; and a random color
     set color item col colors
     set own_color item col colors
+    set dirt_count count patches with [pcolor = item col colors] ; count the number of initial dirty cells in color of agent
     set colors remove-item col colors
     set beliefs []
   ]
@@ -123,13 +126,13 @@ to update-desires
   ; At the beginning your agent should have the desire to 'clean all the dirt'.
   ; If it realises that there is no more dirt, its desire should change to something like 'stop and turn off'.
   ask vacuums[
-    ifelse ticks > 0 and (count patches with [pcolor != white] = 0) ; if simulation is running and no more dirt present
+    ifelse ticks > 0 and dirt_count = 0 ; if simulation is running and no more dirt in color of agent is present
       [
-      set desire "stop and turn off" ; agent's desire becomes 'stop and turn off'
-      set color black ; and he turns black
+      set desire "stop and turn off"    ; then the agent desires to stop
+      set color black
       ]
-      [set desire "clean all the dirt"] ; if not, agent's desire becomes 'clean all the dirt'
-  ]; update
+      [set desire "clean all the dirt"] ; if not, the agent desires to clean
+  ]
 end
 
 ; --- Update beliefs ---
@@ -138,25 +141,56 @@ to update-beliefs
  ; Please remember that you should use this method whenever your agents changes its position.
 
  ; belief about
- ; - own colour
- ; - colour of other agents
- ; - dirty locations
- ask vacuums [
-   set beliefs sort-by [distance ?1 < distance ?2] beliefs
+ ; - own colour             ; not yet
+ ; - colour of other agents ; not yet
+ ; - dirty locations        ; check
+
+ ask vacuums
+ [
+   let vac self
+   let col [color] of vac
+
+   ask sensors with [color = col]                                  ; ask sensors with color of agent
+   [
+    if pcolor = col                                                ; if sensor is on a dirt
+      [
+        let p [patch-here] of self
+        ask vac
+        [
+          set beliefs lput p beliefs                               ; put location of dirt in belief base
+          set beliefs remove-duplicates beliefs                    ; remove possible duplicates
+          set beliefs sort-by [distance ?1 < distance ?2] beliefs  ; sort beliefs by distance from agent (in ascending order)
+        ]
+      ]
+   ]
  ]
+
 end
 
 
 to update-intentions
   ; You should update your agent's intentions here.
   ; The agent's intentions should be dependent on its beliefs and desires.
+  ; intentions:
+  ; - observe       ;check
+  ; - move to dirt  ;check
+  ; - clean dirt    ;check
+  ; - send message  ;not yet
+  ; - none          ;check
+
   ask vacuums [
-    if desire = "clean all the dirt" and not empty? beliefs[ ; if agent desires to 'clean all the dirt' and has beliefs
-       set intention first beliefs ; set intention to the first item in its beliefbase ****************SET INTENTION TO "GO TO LOCATION FIRST BELIEFS"
+    if desire = "clean all the dirt"[       ; if agents wants to clean
+      ifelse not empty? beliefs             ; if agent has beliefs
+      [
+        ifelse intention = patch-here       ; if intention is current patch
+          [set intention "clean this dirt"] ; he intends to clean this dirt
+          [set intention first beliefs]     ; if intention is not the current patch, he intends to move to the nearest dirt
+      ]
+      [set intention "observe"]             ; if agent has no beliefs about dirt, he intends to observe
     ]
-    if desire = "stop and turn off"[ ; if agent desires to 'stop and turn off'
-     set intention "none" ; set intention to none
-    ]
+
+    if desire = "stop and turn off"         ; if agent desires to stop
+       [set intention "none"]               ; he intends nothing
   ]
 end
 
@@ -169,10 +203,8 @@ to execute-actions
 
   ask vacuums [move]
   ask vacuums [observe]
-  ask vacuums [
-    if intention = patch-here and not empty? beliefs
-    [clean]
-    ]
+  ask vacuums [clean]
+
 end
 
 ; TO DO:
@@ -182,19 +214,19 @@ end
 ; belief system opbouwen (lokaal en globaal?)
 ; - belief system alleen voor eigen soort dirt per agent
 
-; method for moving
+; method for moving (intentions: observe, move, clean)
 to move
   ask vacuums
   [
-    ifelse (intention != patch-here and not empty? beliefs and desire = "clean all the dirt") ; if agent has an intention and has the desire to clean
+    if is-patch? intention                         ; if intention is to move to dirt
+      [ face intention                             ; face and move to dirt
+        forward 0.5 ]
+
+    ifelse intention = "observe" and can-move? 0.5 ; if intention is to observe and agent can move
+      [forward 0.5]                                ; move
       [
-        face intention
-        forward 1
-      ]
-      [
-        ifelse can-move? 1 and pcolor = white
-        [forward 1]
-        [set heading random 360]
+        if intention != "none"                     ; if intention is to move or observe or the agent cannot move
+        [set heading random 360]                   ; face a random direction
       ]
   ]
 end
@@ -202,46 +234,37 @@ end
 
 ; method for cleaning
 to clean
-  ; clean cell
-  if pcolor = color [
-    set pcolor white
-    set beliefs remove-item 0 beliefs
-  ]
+  if intention = "clean this dirt"                 ; if intention is to clean
+    [
+    set pcolor white                               ; clean dirt
+    set beliefs remove-item 0 beliefs              ; remove it from the belief base
+    set dirt_count dirt_count - 1                  ; and substract 1 from total dirt in color of agent that is left to clean
+    ]
 end
 
-;method for rondkijken
+;method for observing
 to observe
-  ; create sensors to observe
-  ; create-link-to and shape can be used to show the radios of the vision of agents
-  ; create-link-to should be to sensors which are hatched
-  let vac self
-  let col [color] of vac
-  ask sensors with [color = col] [
-    die
-  ]
-  ; NOTES:
-  ; difficulty is in creating sensors that should then be linked to the correct vacuum
-  ;clear-turtles
-  ask patches in-radius vision_radius [
-    sprout-sensors 1 [
-      create-link-with vac
-      set shape "dot"
-      set color col
-    ]
-  ]
-  ask my-links [set color col]
 
-  ask sensors with [color = col] [
-    if pcolor = col
+  if intention != "none"                           ; if agent has an intention
+  [
+    let vac self
+    let col [color] of vac
+
+    ask sensors with [color = col]                 ; kill all sensors in color of agent
     [
-      let p [patch-here] of self
-      ask vac [
-        set beliefs lput p beliefs
-        set beliefs remove-duplicates beliefs
+      die
+    ]
+    ask patches in-radius vision_radius            ; on patches in agent's vision radius
+    [
+      sprout-sensors 1                             ; create sensors
+      [
+        create-link-with vac                       ; and link them with the agent
+        set shape "dot"
+        set color col
       ]
     ]
+    ask my-links [set color col]                   ; color the links between sensors and agent
   ]
-
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
