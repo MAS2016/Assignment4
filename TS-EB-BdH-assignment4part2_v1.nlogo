@@ -44,7 +44,7 @@ breed [sensors sensor]
 ; 5) other_colors: the agent's belief about the target colors of other agents
 ; 6) outgoing_messages: list of messages sent by the agent to other agents
 ; 7) incoming_messages: list of messages received by the agent from other agents
-vacuums-own [beliefs desire intention own_color other_colors dirt_count outgoing_messages incoming_messages sent_messages]
+vacuums-own [beliefs desire intention own_color other_colors dirt_count outgoing_messages incoming_messages sent_messages has_executed has_observed]
 
 
 ; --- Setup ---
@@ -69,7 +69,9 @@ to go
   tick
   if count patches with [pcolor != white] > 0 ; report time to complete the task
     [set time ticks]
-
+  ask vacuums [
+    set has_executed false
+  ]
 end
 
 
@@ -113,10 +115,11 @@ to setup-vacuums
     set outgoing_messages []
     set incoming_messages []
     set sent_messages []
+    set has_executed false
+    set has_observed false
+    set shape "ufo top"
   ]
 end
-
-
 
 ; --- Setup ticks ---
 to setup-ticks
@@ -131,10 +134,10 @@ to update-desires
   ; At the beginning your agent should have the desire to 'clean all the dirt'.
   ; If it realises that there is no more dirt, its desire should change to something like 'stop and turn off'.
   ask vacuums[
-    ifelse ticks > 0 and dirt_count = 0 ; if simulation is running and no more dirt in color of agent is present
+    ifelse ticks > 0 and dirt_count <= 0 and empty? beliefs ; if simulation is running and no more dirt in color of agent is present
       [
-      set desire "stop and turn off"    ; then the agent desires to stop
-      set color black
+        set desire "stop and turn off"    ; then the agent desires to stop
+        set color black
       ]
       [set desire "clean all the dirt"] ; if not, the agent desires to clean
   ]
@@ -217,7 +220,10 @@ to update-intentions
       [
         ifelse intention = patch-here       ; if intention is current patch
           [set intention "clean this dirt"] ; he intends to clean this dirt
-          [set intention first beliefs]     ; if intention is not the current patch, he intends to move to the nearest dirt
+          [
+            set intention first beliefs
+            face intention
+          ]     ; if intention is not the current patch, he intends to move to the nearest dirt
       ]
       [set intention "observe"]             ; if agent has no beliefs about dirt, he intends to observe
     ]
@@ -233,10 +239,31 @@ to execute-actions
   ; Here you should put the code related to the actions performed by your agent:
   ; moving, cleaning, and (actively) looking around.
   ; Please note that your agents should perform only one action per tick!
-  ask vacuums [move]
-  ask vacuums [observe]
-  ask vacuums [clean]
 
+
+  ; In order to conform to the 'one action per tick' we check whether the agent has executed its action
+  ask vacuums [
+    set has_executed false
+  ]
+  ask vacuums [
+    if intention = "clean this dirt" [
+      clean
+      set has_executed true
+    ]
+  ]
+  ask vacuums [
+    if has_observed and not has_executed [
+      move
+      set has_executed true
+      set has_observed false
+    ]
+  ]
+  ask vacuums [
+    if not has_observed and not has_executed [
+      observe
+      set has_observed true
+    ]
+  ]
 end
 
 ; --- Send messages ---
@@ -258,27 +285,34 @@ to send-messages
             let in_msg list (item 0 msg) (col)
             set incoming_messages lput in_msg incoming_messages
           ]
-          ;set outgoing_messages remove-item 0 outgoing_messages
+          set outgoing_messages remove-item 0 outgoing_messages
         ]
       ]
      ]
     ]
 end
 
-; method for moving
+; method for moving.
+; If move is executed, sensors are no longer valid; they should die.
 to move
   ask vacuums
   [
     if is-patch? intention                         ; if intention is to move to dirt
       [ face intention                             ; face and move to dirt
-        forward 0.5 ]
+        forward 0.5]
 
     ifelse intention = "observe" and can-move? 0.5 ; if intention is to observe and agent can move
-      [forward 0.5]                                ; move
-      [
-        if intention != "none"                     ; if intention is to move or observe or the agent cannot move
-        [set heading random 360]                   ; face a random direction
-      ]
+    [forward 0.5]                                ; move
+    [
+      if intention != "none"                     ; if intention is to move or observe or the agent cannot move
+      [set heading random 360]                   ; face a random direction
+    ]
+
+    let col [color]  of self
+    ask sensors with [color = col]                 ; kill all sensors in color of agent
+    [
+      die
+    ]
   ]
 end
 
@@ -287,9 +321,9 @@ end
 to clean
   if intention = "clean this dirt"                 ; if intention is to clean
     [
-    set pcolor white                               ; clean dirt
-    set beliefs remove-item 0 beliefs              ; remove it from the belief base
-    set dirt_count dirt_count - 1                  ; and substract 1 from total dirt in color of agent that is left to clean
+      set pcolor white                               ; clean dirt
+      set beliefs remove-item 0 beliefs              ; remove it from the belief base
+      set dirt_count dirt_count - 1                  ; and substract 1 from total dirt in color of agent that is left to clean
     ]
 end
 
@@ -301,10 +335,6 @@ to observe
     let vac self
     let col [color] of vac
 
-    ask sensors with [color = col]                 ; kill all sensors in color of agent
-    [
-      die
-    ]
     ask patches in-radius vision_radius            ; on patches in agent's vision radius
     [
       sprout-sensors 1                             ; create sensors
@@ -354,7 +384,7 @@ dirt_pct
 dirt_pct
 0
 100
-3
+31
 1
 1
 NIL
@@ -475,10 +505,10 @@ Beliefs of vacuum 1
 11
 
 MONITOR
-5
-465
-772
-510
+7
+460
+774
+505
 Beliefs of vacuum 2
 [beliefs] of vacuum 1
 17
@@ -497,10 +527,10 @@ Color of vacuum 1
 11
 
 MONITOR
-5
-421
-115
-466
+7
+416
+117
+461
 Color of vacuum 2
 [own_color] of vacuum 1
 17
@@ -508,10 +538,10 @@ Color of vacuum 2
 11
 
 MONITOR
-452
-421
-772
-466
+454
+416
+774
+461
 Intention of vacuum 2
 [intention] of vacuum 1
 17
@@ -519,10 +549,10 @@ Intention of vacuum 2
 11
 
 MONITOR
-115
-421
-452
-466
+117
+416
+454
+461
 Desire of vacuum 2
 [desire] of vacuum 1
 17
@@ -530,10 +560,10 @@ Desire of vacuum 2
 11
 
 MONITOR
-5
-566
-113
-611
+7
+561
+115
+606
 Color of vacuum 3
 [own_color] of vacuum 2
 17
@@ -541,10 +571,10 @@ Color of vacuum 3
 11
 
 MONITOR
-5
-610
-772
-655
+7
+605
+774
+650
 Beliefs of vacuum 3
 [beliefs] of vacuum 2
 17
@@ -552,10 +582,10 @@ Beliefs of vacuum 3
 11
 
 MONITOR
-453
-566
-772
-611
+455
+561
+774
+606
 Intention of vacuum 3
 [intention] of vacuum 2
 17
@@ -563,10 +593,10 @@ Intention of vacuum 3
 11
 
 MONITOR
-113
-566
-453
-611
+115
+561
+455
+606
 Desire of vacuum 3
 [desire] of vacuum 2
 17
@@ -596,10 +626,10 @@ Incoming messages vacuum 1
 11
 
 MONITOR
-5
-508
-389
-553
+7
+503
+391
+548
 Outgoing messages vacuum 2
 [outgoing_messages] of vacuum 1
 17
@@ -607,10 +637,10 @@ Outgoing messages vacuum 2
 11
 
 MONITOR
-388
-508
-772
-553
+390
+503
+774
+548
 Incoming messages vacuum 2
 [incoming_messages] of vacuum 1
 17
@@ -618,10 +648,10 @@ Incoming messages vacuum 2
 11
 
 MONITOR
-6
-653
-389
-698
+8
+648
+391
+693
 Outgoing messages vacuum 3
 [outgoing_messages] of vacuum 2
 17
@@ -629,10 +659,10 @@ Outgoing messages vacuum 3
 11
 
 MONITOR
-389
-653
-772
-698
+391
+648
+774
+693
 Incoming messages vacuum 3
 [incoming_messages] of vacuum 2
 17
@@ -646,6 +676,39 @@ MONITOR
 92
 Time to complete the task.
 time
+17
+1
+11
+
+MONITOR
+786
+587
+1296
+632
+Sent messages vacuum 1
+[sent_messages] of vacuum 0
+17
+1
+11
+
+MONITOR
+787
+633
+1296
+678
+Sent messages vacuum 2
+[sent_messages] of vacuum 1
+17
+1
+11
+
+MONITOR
+788
+680
+1295
+725
+Sent messages vacuum 3
+[sent_messages] of vacuum 2
 17
 1
 11
