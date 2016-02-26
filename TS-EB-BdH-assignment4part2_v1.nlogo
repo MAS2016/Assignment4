@@ -156,6 +156,7 @@ to update-beliefs
    let vac self
    let col [color] of vac
 
+
    ask sensors with [color = col]                                  ; ask sensors with color of agent
    [
     let p [patch-here] of self
@@ -166,15 +167,12 @@ to update-beliefs
         [
           set beliefs lput p beliefs                               ; put location of dirt in belief base
           set beliefs remove-duplicates beliefs                    ; remove possible duplicates
-          set beliefs sort-by [distance ?1 < distance ?2] beliefs  ; sort beliefs by distance from agent (in ascending order)
         ]
       ]
       [
-
-        let pcol [pcolor] of p
+        let pcol [pcolor] of p         ; scan for dirty patches other than own color
         if pcol != white ; if patch is not already clean
         [
-
           let message list (p) (pcol) ; create new message based on patch and patch color under sensor
           ; if messages in sent-messages, do not send
 
@@ -185,6 +183,18 @@ to update-beliefs
         ]
       ]
    ]
+
+   ; if sensor scanning is done, add incoming messages to beliefs
+   if not empty? incoming_messages [
+     foreach incoming_messages[
+       let msg ?
+       let inc_patch item 0 msg
+       set beliefs lput inc_patch beliefs
+       set incoming_messages remove ? incoming_messages
+     ]
+   ]
+   set beliefs remove-duplicates beliefs                    ; remove possible duplicates
+   set beliefs sort-by [distance ?1 < distance ?2] beliefs  ; sort beliefs by distance from agent (in ascending order)
  ]
 
 end
@@ -591,7 +601,7 @@ MONITOR
 389
 553
 Outgoing messages vacuum 2
-sort ([outgoing_messages] of vacuum 1)
+[outgoing_messages] of vacuum 1
 17
 1
 11
@@ -613,7 +623,7 @@ MONITOR
 389
 698
 Outgoing messages vacuum 3
-sort ([outgoing_messages] of vacuum 2)
+[outgoing_messages] of vacuum 2
 17
 1
 11
