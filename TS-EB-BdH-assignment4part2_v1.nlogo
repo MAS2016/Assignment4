@@ -134,7 +134,8 @@ to update-desires
   ; At the beginning your agent should have the desire to 'clean all the dirt'.
   ; If it realises that there is no more dirt, its desire should change to something like 'stop and turn off'.
   ask vacuums[
-    ifelse ticks > 0 and dirt_count <= 0 and empty? beliefs ; if simulation is running and no more dirt in color of agent is present
+    let col color
+    ifelse ticks > 0 and count patches with [pcolor = col] = 0 and empty? beliefs ; if simulation is running and no more dirt in color of agent is present
       [
         set desire "stop and turn off"    ; then the agent desires to stop
         set color black
@@ -222,7 +223,6 @@ to update-intentions
           [set intention "clean this dirt"] ; he intends to clean this dirt
           [
             set intention first beliefs
-            face intention
           ]     ; if intention is not the current patch, he intends to move to the nearest dirt
       ]
       [set intention "observe"]             ; if agent has no beliefs about dirt, he intends to observe
@@ -384,7 +384,7 @@ dirt_pct
 dirt_pct
 0
 100
-31
+100
 1
 1
 NIL
@@ -450,7 +450,7 @@ num_agents
 num_agents
 2
 7
-3
+7
 1
 1
 NIL
@@ -832,7 +832,7 @@ Circle -7500403 true true 0 0 300
 dot
 false
 0
-Circle -7500403 true true 90 90 120
+Circle -7500403 true true 120 120 60
 
 face happy
 false
