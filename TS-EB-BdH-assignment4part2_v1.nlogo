@@ -44,7 +44,7 @@ breed [sensors sensor]
 ; 5) other_colors: the agent's belief about the target colors of other agents
 ; 6) outgoing_messages: list of messages sent by the agent to other agents
 ; 7) incoming_messages: list of messages received by the agent from other agents
-vacuums-own [beliefs desire intention own_color other_colors dirt_count outgoing_messages incoming_messages]
+vacuums-own [beliefs desire intention own_color other_colors dirt_count outgoing_messages incoming_messages sent_messages]
 
 
 ; --- Setup ---
@@ -110,6 +110,9 @@ to setup-vacuums
     set dirt_count count patches with [pcolor = item col colors] ; count the number of initial dirty cells in color of agent
     set colors remove-item col colors
     set beliefs []
+    set outgoing_messages []
+    set incoming_messages []
+    set sent_messages []
   ]
 end
 
@@ -155,14 +158,30 @@ to update-beliefs
 
    ask sensors with [color = col]                                  ; ask sensors with color of agent
    [
-    if pcolor = col                                                ; if sensor is on a dirt
+    let p [patch-here] of self
+    ifelse pcolor = col                                                ; if sensor is on a dirt
       [
-        let p [patch-here] of self
+
         ask vac
         [
           set beliefs lput p beliefs                               ; put location of dirt in belief base
           set beliefs remove-duplicates beliefs                    ; remove possible duplicates
           set beliefs sort-by [distance ?1 < distance ?2] beliefs  ; sort beliefs by distance from agent (in ascending order)
+        ]
+      ]
+      [
+
+        let pcol [pcolor] of p
+        if pcol != white ; if patch is not already clean
+        [
+
+          let message list (p) (pcol) ; create new message based on patch and patch color under sensor
+          ; if messages in sent-messages, do not send
+
+          ask vac [
+              set outgoing_messages lput message outgoing_messages             ; add patch + pcolor to outgoing_messages
+              set outgoing_messages remove-duplicates outgoing_messages
+          ]
         ]
       ]
    ]
@@ -204,7 +223,6 @@ to execute-actions
   ; Here you should put the code related to the actions performed by your agent:
   ; moving, cleaning, and (actively) looking around.
   ; Please note that your agents should perform only one action per tick!
-
   ask vacuums [move]
   ask vacuums [observe]
   ask vacuums [clean]
@@ -215,14 +233,27 @@ end
 to send-messages
   ; Here should put the code related to sending messages to other agents.
   ; Note that this could be seen as a special case of executing actions, but for conceptual clarity it has been put in a separate method.
+  ask vacuums [
+    if not empty? outgoing_messages
+    [
+      ; check welke ontvanger bericht moet krijgen
+      ; stuur naar specifieke ontvanger
+      foreach outgoing_messages [
+        let msg ?
+        if not member? msg sent_messages[
+          set sent_messages lput msg sent_messages
+          let col [color] of self
+          ask vacuums with [color = item 1 msg]
+          [ ;message color
+            let in_msg list (item 0 msg) (col)
+            set incoming_messages lput in_msg incoming_messages
+          ]
+          ;set outgoing_messages remove-item 0 outgoing_messages
+        ]
+      ]
+     ]
+    ]
 end
-
-; TO DO:
-; method voor moving
-; method voor cleaning
-; method voor rondkijken
-; belief system opbouwen (lokaal en globaal?)
-; - belief system alleen voor eigen soort dirt per agent
 
 ; method for moving
 to move
@@ -394,7 +425,7 @@ vision_radius
 vision_radius
 0
 20
-6
+3
 0.5
 1
 NIL
@@ -538,7 +569,7 @@ MONITOR
 385
 409
 Outgoing messages vacuum 1
-sort ([outgoing_messages] of vacuum 0)
+[outgoing_messages] of vacuum 0
 17
 1
 11
