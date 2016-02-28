@@ -164,32 +164,42 @@ to update-beliefs
    let vac self
    let col [color] of self
 
-   if length colors = 1 and color = white [                       ;
+   if length colors = 1 and col = white [;
      set color item 0 colors                                      ; last white vacuum gets last available color
      set own_color item 0 colors
      set dirt_count count patches with [pcolor = col]             ; count the number of initial dirty cells in color of agent
-     set colors [] ]                                              ; all colors are used so color list is empty
-
-   if color = white [                                             ; if a vacuum = white
+     set colors []
+   ]
+   if col = white [                                             ; if a vacuum = white
      foreach colors [                                             ; loop for all still available colors;
-       if (occurrences ? belief_colors >= color_treshold) and (occurrences ? colors > 0) [                   ; if color > color_treshold and color is still available
+       if (occurrences ? belief_colors >= color_treshold) and own_color = white [                   ; if color > color_treshold and color is still available
          set color ?
+         print color
+         print occurrences ? belief_colors
          set own_color ?                                          ; set color of vacuum to above available color
          set dirt_count count patches with [pcolor = ?]
          set colors remove ? colors ]
-       ]]
+       ]
+   ]
 
    if color = white [
      ask sensors
      [
-       if [other-end] of my-links = vac and pcolor != white      ; hier moet hij alleen de sensors pakken die bij de agent hoort (en dirt heeft), MAAR dit werkt nog niet!
+       if one-of link-neighbors = vac and pcolor != white      ; get sensor which is on dirt and is linked to this vacuum
          [
          let p [patch-here] of self
          let pcol pcolor
-         ask vacuums
-           [ if not member? p belief_colors                      ; if agent has not already seen this dirt
-               [let dirt-seen list (p) (pcol)
-                set belief_colors lput dirt-seen belief_colors]  ; put dirt location and color in belief
+         ask vac
+           [
+             let has_seen_patch false
+             foreach belief_colors [
+               if item 0 ? = p
+               [set has_seen_patch true]
+             ]
+               if not has_seen_patch                          ; if agent has not already seen this dirt
+                 [let dirt-seen list (p) (pcol)
+                  set belief_colors lput dirt-seen belief_colors   ; put dirt location and color in belief
+                  set belief_colors remove-duplicates belief_colors]  ; and remove duplicates
            ]
          ]
        ]
@@ -222,8 +232,6 @@ to update-beliefs
      ]
    ]
 
-
-
 ;; if sensor scanning is done, add incoming messages to beliefs
    if not empty? incoming_messages [
      foreach incoming_messages[
@@ -240,8 +248,13 @@ end
 
 ;; count the number of occurences of an item in a list
 to-report occurrences [x the-list]
-  report reduce
-    [ifelse-value (?2 = x) [?1 + 1] [?1]] (fput 0 the-list)
+  let total 0
+  foreach the-list [
+    if item 1 ? = x [
+      set total total + 1
+    ]
+  ]
+  report total
 end
 
 
@@ -351,7 +364,7 @@ to move
     ]
 
     let col [color]  of self
-    ask sensors with [color = col]                 ; kill all sensors in color of agent
+    ask link-neighbors                 ; kill all sensors in color of agent
     [
       die
     ]
@@ -423,7 +436,7 @@ dirt_pct
 dirt_pct
 0
 100
-3
+9
 1
 1
 NIL
@@ -489,7 +502,7 @@ num_agents
 num_agents
 2
 7
-3
+2
 1
 1
 NIL
