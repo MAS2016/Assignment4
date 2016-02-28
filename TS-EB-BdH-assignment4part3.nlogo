@@ -48,6 +48,7 @@ breed [sensors sensor]
 ; 5) other_colors: the agent's belief about the target colors of other agents
 ; 6) outgoing_messages: list of messages sent by the agent to other agents
 ; 7) incoming_messages: list of messages received by the agent from other agents
+
 vacuums-own [beliefs belief_colors desire intention own_color other_colors dirt_count outgoing_messages incoming_messages sent_messages has_executed has_observed]
 
 
@@ -70,8 +71,8 @@ to go
   execute-actions
   send-messages
   tick
-  if count patches with [pcolor != white] > 0 ; report time to complete the task
-    [set time ticks]
+  if count patches with [pcolor != white] > 0
+    [set time ticks]                     ; report time to complete the task
   ask vacuums [
     set has_executed false
   ]
@@ -108,7 +109,7 @@ to setup-vacuums
   ; In this method you may create the vacuum cleaner agents.
   create-vacuums num_agents [                                    ; create vacuums
     setxy (random-xcor) (random-ycor)                            ; with random starting positions
-;    let col random length colors                                ;; and a random color
+;    let col random length colors                                ; and a random color
     set color white
     set own_color white                                          ;set initial color = white
 ;    set dirt_count count patches with [pcolor = item col colors] ; count the number of initial dirty cells in color of agent
@@ -161,7 +162,7 @@ to update-beliefs
  ask vacuums
  [
    let vac self
-   let col [color] of vac
+   let col [color] of self
 
    if length colors = 1 and color = white [                       ;
      set color item 0 colors                                      ; last white vacuum gets last available color
@@ -170,7 +171,7 @@ to update-beliefs
      set colors [] ]                                              ; all colors are used so color list is empty
 
    if color = white [                                             ; if a vacuum = white
-     foreach colors [                                             ;loop for all still available colors;
+     foreach colors [                                             ; loop for all still available colors;
        if (occurrences ? belief_colors >= color_treshold) and (occurrences ? colors > 0) [                   ; if color > color_treshold and color is still available
          set color ?
          set own_color ?                                          ; set color of vacuum to above available color
@@ -178,20 +179,21 @@ to update-beliefs
          set colors remove ? colors ]
        ]]
 
-   if color = white [                                                ; if vacuum = white then count colors
-     ask sensors with [color = col]                                  ; ask sensors with color of agent
+   if color = white [
+     ask sensors
      [
-       let p [patch-here] of self
-
-       if col = white and pcolor != white                            ; if sensor = white and patch = dirt (any color) then add dirt to beliefs
-          [ask vac
-            [set belief_colors lput pcolor belief_colors]]           ; put color in color belief base
-
-       if col != white and pcolor = col                              ; if sensor color <> white and sensor color = patch color then add dirt to beliefs
-          [ask vac
-            [set beliefs lput p beliefs                              ; put location of dirt in belief base
-             set beliefs remove-duplicates beliefs]]                 ; remove possible duplicates   if col != white [
-      ]
+       if [other-end] of my-links = vac and pcolor != white      ; hier moet hij alleen de sensors pakken die bij de agent hoort (en dirt heeft), MAAR dit werkt nog niet!
+         [
+         let p [patch-here] of self
+         let pcol pcolor
+         ask vacuums
+           [ if not member? p belief_colors                      ; if agent has not already seen this dirt
+               [let dirt-seen list (p) (pcol)
+                set belief_colors lput dirt-seen belief_colors]  ; put dirt location and color in belief
+           ]
+         ]
+       ]
+     ]
 
    if color != white [
      ask sensors with [color = col]                                  ; ask sensors with color of agent
@@ -219,7 +221,7 @@ to update-beliefs
        ]
      ]
    ]
- ]
+
 
 
 ;; if sensor scanning is done, add incoming messages to beliefs
@@ -421,7 +423,7 @@ dirt_pct
 dirt_pct
 0
 100
-40
+3
 1
 1
 NIL
